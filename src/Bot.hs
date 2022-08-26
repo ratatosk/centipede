@@ -22,23 +22,14 @@ import Telegram.Bot.API.Methods
 import Telegram.Bot.API.GettingUpdates
 import Telegram.Bot.API.MakingRequests
 
-import qualified Data.Text.IO as T
 import qualified Data.Text as T
 
 import Cmd
 import Types
-
-
-bark :: MonadIO m => T.Text -> m ()
-bark msg = liftIO $ T.putStrLn msg
+import Util
 
 updateTimeoutSec :: Int
 updateTimeoutSec = 600
-
-data Ctx = Ctx
-    { ctxUser   :: T.Text
-    , ctxChatId :: ChatId
-    } deriving (Show)
 
 messageCtx :: Message -> Either String Ctx
 messageCtx msg = do
@@ -60,7 +51,7 @@ processUpdate :: Update -> BotM ()
 processUpdate upd = 
     case updateMessage upd of
         Just msg -> processMsg msg
-        Nothing -> liftIO $ T.putStrLn "No message"
+        Nothing -> bark ["No message"]
 
 processMsg :: Message -> BotM ()
 processMsg msg = 
@@ -71,22 +62,20 @@ processMsg msg =
                 Left err -> do
                     liftIO $ putStrLn err
                     reply ctx (T.pack err)
-                Right cmd -> processCmd cmd >>= reply ctx 
+                Right cmd -> processCmd ctx cmd >>= mapM_ (reply ctx)
 
 sendRequest :: BotM (Response a) -> BotM (Maybe a)
 sendRequest act = do
     result <- (Right <$> act) `catchError` (return . Left . T.pack . show)
     case result of
         Left err -> do
-            bark "Transport error:"
-            bark err
+            bark ["Transport error: ", err]
             liftIO $ threadDelay 5000000
             return Nothing
         Right resp -> if responseOk resp
             then return $ Just (responseResult resp)
             else do
-                bark "Server error:" 
-                bark (fromMaybe "unknown" (responseDescription resp))
+                bark ["Server error: ", (fromMaybe "unknown" (responseDescription resp))]
                 liftIO $ threadDelay 5000000
                 return Nothing
 

@@ -25,6 +25,7 @@ library:
   source-dirs: src
   dependencies:
   - mtl
+  - transformers
   - monad-loops
   - text
   - bytestring
