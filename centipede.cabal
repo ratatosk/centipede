@@ -49,7 +49,6 @@ library
     , servant-server
     , telegram-bot-simple
     , text
-    , transformers
     , unordered-containers
     , warp
   default-language: Haskell2010

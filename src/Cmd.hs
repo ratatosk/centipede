@@ -9,7 +9,7 @@ module Cmd
 
 import Control.Monad
 import Control.Monad.RWS.Strict
-import Control.Monad.Trans.Except
+import Control.Monad.Except
 import Data.List
 import Data.Maybe
 import Data.Tuple.Extra
@@ -78,7 +78,7 @@ type ChatM a = RWST Ctx [Text] ChatState (Except Text) a
 
 withChatState :: ChatM a -> ChatMM a
 withChatState a = RWST $ \r s -> case s of
-    Nothing -> throwE "No active users, use /join"
+    Nothing -> throwError "No active users, use /join"
     Just s' -> liftM (second3 Just) $ runRWST a r s'
 
 processCmd :: Ctx -> Cmd -> BotM [Text]
@@ -142,7 +142,7 @@ addItem i cs = cs { csItems = newItems }
 getUserId :: Text -> ChatM Int
 getUserId u = do 
     userId <- gets $ elemIndex u . csUsers
-    maybe (lift $ throwE $ T.concat ["User @", u, " isn't participating"]) return userId
+    maybe (throwError $ T.concat ["User @", u, " isn't participating"]) return userId
 
 
     
