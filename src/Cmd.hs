@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 module Cmd 
     ( Cmd(..)
@@ -12,13 +13,14 @@ import Control.Monad.RWS.Strict
 import Control.Monad.Except
 import Data.List
 import Data.Maybe
+import Data.Array (elems, accumArray)
 import Data.Tuple.Extra
 import Data.Either.Extra
 import qualified Data.HashMap.Strict as H
 import Text.Parsec  
 import Text.Parsec.Text
-
-import Data.Text as T (Text, concat, pack)
+import Data.Text as T (Text, pack, unlines)
+import Data.String.Interpolate (i)
 
 import Types
 import Util
@@ -94,9 +96,9 @@ processCmd ctx cmd = do
             return [err]
 
 process :: Cmd -> ChatMM ()
-process (Add i s p) = withChatState $ processAdd i s p
+process (Add n s p) = withChatState $ processAdd n s p
 process (Join us) = processJoin us
-process (Stat) = rep ["Sorry, not implemented"]
+process (Stat) = withChatState processStats
 
 defaultCs :: ChatState
 defaultCs = ChatState
@@ -105,30 +107,62 @@ defaultCs = ChatState
     , csItems = []
     }
 
-rep :: MonadWriter [Text] m => [Text] -> m ()
-rep = tell . singleton . T.concat
+rep :: MonadWriter [Text] m => Text -> m ()
+rep = tell . singleton
 
 processJoin :: [UserHandle] -> ChatMM ()
 processJoin users = do
     cs <- gets $ fromMaybe defaultCs
     let oldUsers = csUsers cs
     let present = intersect oldUsers users
-    forM_ present $ \u -> rep ["Already added: @", u] 
+    forM_ present $ \u -> rep [i|"Already added: @#{u}"|]
     let newUsers = users \\ oldUsers
-    forM_ newUsers $ \u -> rep ["Added: @", u] 
+    forM_ newUsers $ \u -> rep [i|"Added: @#{u}"|]
     let users' = oldUsers ++ newUsers
     put $ Just (cs {csUsers = users'})
 
 processAdd :: Text -> Double -> UserHandle -> ChatM ()
-processAdd i p u = do
+processAdd n p u = do
     userId <- getUserId u
     allUsers <- allUserIds
-    let item = Item { iName = i
+    let item = Item { iName = n
                     , iPayers = [(userId, p)] 
                     , iUsers = zip allUsers (repeat 1)
                     }
     modify $ addItem item
-    rep ["Item added"]
+    rep "Item added"
+
+processStats :: ChatM ()
+processStats = do
+    items <- gets csItems
+    users <- gets csUsers
+    let n = length users
+    let payed = calcPayers n $ map iPayers items
+    let prices = calcPrices $ map iPayers items
+    let used = calcUsers n $ zip (map iUsers items) prices
+    rep $ formatStats $ zip3 users payed used
+
+calcPayers :: Int -> [[(Int, Double)]] -> [Double]
+calcPayers n p = elems $ accumArray (+) 0 (0, n-1) (concat p)
+
+calcPrices :: [[(Int, Double)]] -> [Double]
+calcPrices = map (sum . map snd)
+
+calcUsers :: Int -> [([(Int, Double)], Double)] -> [Double]
+calcUsers n items = elems $ accumArray (+) 0 (0, n-1) (concatMap (uncurry calcItemUsers) items)
+
+calcItemUsers :: [(Int, Double)] -> Double -> [(Int, Double)]
+calcItemUsers us p =
+    map (second (* pp)) us
+  where
+    pp = p / sum (map snd us)
+
+formatStats :: [(UserHandle, Double, Double)] -> Text
+formatStats = T.unlines . map (uncurry3 formatStat)
+
+formatStat :: UserHandle -> Double -> Double -> Text
+formatStat user p u | p > u = [i|@#{user} payed #{p} consumed #{u}, is owed #{p - u}|]
+formatStat user p u | otherwise = [i|@#{user} payed #{p} consumed #{u}, owes #{u - p}|]
 
 allUserIds :: ChatM [Int]
 allUserIds = do
@@ -136,13 +170,13 @@ allUserIds = do
     return $ enumFromTo 0 (nUsers - 1)
 
 addItem :: Item -> ChatState -> ChatState
-addItem i cs = cs { csItems = newItems }
-    where newItems = i : csItems cs
+addItem n cs = cs { csItems = newItems }
+    where newItems = n : csItems cs
 
 getUserId :: Text -> ChatM Int
 getUserId u = do 
     userId <- gets $ elemIndex u . csUsers
-    maybe (throwError $ T.concat ["User @", u, " isn't participating"]) return userId
+    maybe (throwError $ [i|"User @#{u} isn't participating"|]) return userId
 
 
     

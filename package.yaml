@@ -24,13 +24,14 @@ dependencies:
 library:
   source-dirs: src
   dependencies:
+  - array
   - mtl
   - monad-loops
   - text
   - bytestring
   - unordered-containers
   - parsec
-  - telegram-bot-simple
+  - string-interpolate
   - extra
   - http-client
   - servant
@@ -41,6 +42,7 @@ library:
   - http-media
   - servant-lucid
   - warp
+  - telegram-bot-simple
 
 executables:
   centipede-exe:
